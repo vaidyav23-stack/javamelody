@@ -1,4 +1,4 @@
-name: Java CI with Code Scanning and SCA
+name: Java CI with SAST & SCA
 
 on:
   push:
@@ -7,71 +7,74 @@ on:
     branches: [ master ]
 
 jobs:
-  build-and-analyze:
+  build:
     runs-on: ubuntu-latest
     steps:
-      # -------------------------
-      # 1. Checkout
-      # -------------------------
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # -------------------------
-      # 2. Setup Java
-      # -------------------------
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      # -------------------------
-      # 3. Build & Test
-      # -------------------------
-      - name: Build & Test
-        run: mvn clean install -DskipTests=false
+      - name: Build & Unit Tests
+        run: mvn clean install
 
-      # -------------------------
-      # 4. Initialize CodeQL
-      # -------------------------
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+  spotbugs-sast:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
-          languages: java
-
-      # -------------------------
-      # 5. Perform CodeQL Analysis
-      # -------------------------
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
-        with:
-          category: "/language:java"
-
-      # -------------------------
-      # 6. OWASP Dependency-Check (SCA)
-      # -------------------------
-      - name: OWASP Dependency-Check
+          distribution: temurin
+          java-version: '17'
+      - name: Run SpotBugs
         run: |
-          mvn org.owasp:dependency-check-maven:8.4.0:check \
-            -Dformat=HTML \
-            -DoutputDirectory=target/dependency-check-report \
-            -DoutputFile=dependency-check-report.html \
-            -DfailBuildOnCVSS=0 || true
-
-      # -------------------------
-      # 7. Upload SCA HTML Report
-      # -------------------------
-      - name: Upload SCA HTML Report
+          mvn com.github.spotbugs:spotbugs-maven-plugin:4.7.3.0:spotbugs \
+            -Dspotbugs.output.format=html \
+            -Dspotbugs.outputFile=target/spotbugs.html
+      - name: Upload SpotBugs Report
         uses: actions/upload-artifact@v4
         with:
-          name: dependency-check-report
+          name: spotbugs-html
+          path: target/spotbugs.html
+
+  dependency-check-sca:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Run Dependency-Check
+        run: |
+          mvn org.owasp:dependency-check-maven:8.3.2:check \
+            -Dformat=HTML \
+            -DoutputDirectory=target/dependency-check-report || true
+      - name: Upload Dependency-Check Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-html
           path: target/dependency-check-report/dependency-check-report.html
 
-      # -------------------------
-      # 8. Upload CodeQL SARIF
-      # -------------------------
-      - name: Upload CodeQL SARIF
+  trivy-scan:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh
+      - name: Run Trivy FS scan
+        run: trivy fs --format html --output trivy-fs.html .
+      - name: Upload Trivy FS Report
         uses: actions/upload-artifact@v4
         with:
-          name: codeql-sarif
-          path: results.sarif
+          name: trivy-fs-html
+          path: trivy-fs.html
