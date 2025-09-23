@@ -74,23 +74,31 @@ jobs:
           category: "/language:${{ steps.detect.outputs.lang }}"
           output: results
 
-      # 9️⃣ Generate SARIF Report
+      # 9️⃣ Generate SARIF Report safely
       - name: Generate SARIF Report
         if: env.skip_analysis != 'true' && steps.detect.outputs.lang != 'unknown'
         run: |
-          mkdir -p codeql-sarif
-          /opt/hostedtoolcache/CodeQL/2.23.0/x64/codeql/codeql database interpret-results results \
-            --format=sarif-latest \
-            --output=codeql-sarif/report.sarif \
-            --sarif-category="/language:${{ steps.detect.outputs.lang }}"
+          if [ -d "results" ]; then
+            mkdir -p codeql-sarif
+            /opt/hostedtoolcache/CodeQL/2.23.0/x64/codeql/codeql database interpret-results results \
+              --format=sarif-latest \
+              --output=codeql-sarif/report.sarif \
+              --sarif-category="/language:${{ steps.detect.outputs.lang }}"
+          else
+            echo "No CodeQL results directory found. Skipping SARIF generation."
+          fi
 
       # 🔟 Convert SARIF to HTML
       - name: Convert SARIF to HTML
         if: env.skip_analysis != 'true' && steps.detect.outputs.lang != 'unknown'
         run: |
-          npm install -g sarif-html
-          mkdir -p codeql-html
-          sarif-html codeql-sarif/report.sarif -o codeql-html/report.html
+          if [ -f "codeql-sarif/report.sarif" ]; then
+            npm install -g sarif-html
+            mkdir -p codeql-html
+            sarif-html codeql-sarif/report.sarif -o codeql-html/report.html
+          else
+            echo "No SARIF file found. Skipping HTML conversion."
+          fi
 
       # 1️⃣1️⃣ Upload HTML report
       - name: Upload HTML Report
