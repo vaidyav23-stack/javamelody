@@ -56,7 +56,7 @@ jobs:
         if: steps.detect.outputs.lang == 'java'
         run: |
           mvn -B -DskipTests clean install || true
-          # Check if any classes were generated
+          # Check if classes were generated
           if ! find . -type f -path "*/target/classes/*.class" | grep -q .; then
             echo "skip_analysis=true" >> $GITHUB_ENV
 
