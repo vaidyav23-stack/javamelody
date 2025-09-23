@@ -61,7 +61,6 @@ jobs:
           else
             echo "No supported language detected"
             exit 1
-          fi
 
       # -------------------------
       # Initialize CodeQL
@@ -75,9 +74,11 @@ jobs:
       # Perform CodeQL Analysis
       # -------------------------
       - name: Perform CodeQL Analysis
+        id: codeql
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{ steps.detect.outputs.lang }}"
+          output: results.sarif
 
       # -------------------------
       # Convert SARIF to HTML using Python
@@ -88,23 +89,37 @@ jobs:
           python -m pip install --upgrade pip
           pip install sarif-om
           mkdir -p codeql-html
-          python - <<EOF
+          python - <<'EOF'
 import json
 from sarif_om import load_json, render_html
 
 with open("results.sarif") as f:
     log = load_json(f)
 
+# Convert SARIF -> HTML
 html_content = render_html(log)
 with open("codeql-html/report.html", "w") as out_file:
     out_file.write(html_content)
+
+# Fail pipeline if critical/high issues exist
+problems = []
+for run in log["runs"]:
+    for result in run["results"]:
+        level = result.get("level", "").lower()
+        if level in ["error", "warning"]:  # CodeQL uses 'error'/'warning'
+            problems.append(result)
+
+if problems:
+    print(f"❌ Found {len(problems)} security issues!")
+    exit(1)
+else:
+    print("✅ No critical issues found.")
 EOF
 
-      # -------------------------
-      # Upload HTML Report
-      # -------------------------
+      #---------------------------
+      # Upload HTML Report as Artifact
+      #---------------------------
       - name: Upload HTML Report
-        if: steps.detect.outputs.lang != 'unknown'
         uses: actions/upload-artifact@v4
         with:
           name: codeql-html-report
