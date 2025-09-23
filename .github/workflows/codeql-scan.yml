@@ -5,7 +5,7 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
-
+    
 jobs:
   codeql-analyze:
     name: CodeQL Analysis
@@ -30,7 +30,7 @@ jobs:
           else
             echo "lang=unknown" >> "$GITHUB_OUTPUT"
 
-      # 3️⃣ Setup Java (if applicable)
+      # 3️⃣ Setup Java (if Java detected)
       - name: Setup Java
         if: steps.detect.outputs.lang == 'java'
         uses: actions/setup-java@v4
@@ -38,13 +38,20 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # 4️⃣ Initialize CodeQL for detected language
+      # 4️⃣ Setup .NET (if .NET detected)
+      - name: Setup .NET
+        if: steps.detect.outputs.lang == 'dotnet'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # 5️⃣ Initialize CodeQL for detected language
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ steps.detect.outputs.lang == 'java' && 'java' || steps.detect.outputs.lang == 'dotnet' && 'csharp' || '' }}
 
-      # 5️⃣ Build Java (multi-module safe)
+      # 6️⃣ Build Java (multi-module Maven)
       - name: Build Java
         if: steps.detect.outputs.lang == 'java'
         run: |
@@ -52,18 +59,12 @@ jobs:
           if ! find . -type f -path "*/target/classes/*.class" | grep -q .; then
             echo "skip_analysis=true" >> $GITHUB_ENV
 
-      # 6️⃣ Build .NET
-      - name: Setup .NET
-        if: steps.detect.outputs.lang == 'dotnet'
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.0.x'
-
+      # 7️⃣ Build .NET
       - name: Build .NET
         if: steps.detect.outputs.lang == 'dotnet'
         run: dotnet build --configuration Release --no-restore || true
 
-      # 7️⃣ Run CodeQL Analysis
+      # 8️⃣ Perform CodeQL analysis
       - name: Perform CodeQL Analysis
         if: env.skip_analysis != 'true' && steps.detect.outputs.lang != 'unknown'
         uses: github/codeql-action/analyze@v3
@@ -71,19 +72,12 @@ jobs:
           category: "/language:${{ steps.detect.outputs.lang }}"
           output: results
 
-      # 8️⃣ Setup CodeQL CLI for HTML report
-      - name: Setup CodeQL CLI
-        if: env.skip_analysis != 'true' && steps.detect.outputs.lang != 'unknown'
-        uses: github/codeql-action/setup@v2
-        with:
-          version: latest
-
-      # 9️⃣ Generate HTML report
+      # 9️⃣ Generate HTML report from CodeQL results
       - name: Generate CodeQL HTML Report
         if: env.skip_analysis != 'true' && steps.detect.outputs.lang != 'unknown'
         run: |
           mkdir -p codeql-html
-          codeql database interpret-results results \
+          /opt/hostedtoolcache/CodeQL/2.23.0/x64/codeql/codeql database interpret-results results \
             --format=html \
             --output=codeql-html/report.html \
             --sarif-category="/language:${{ steps.detect.outputs.lang }}"
