@@ -1,0 +1,36 @@
+name: SCA-Scan
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  sca-scan:
+    runs-on: ubuntu-latest
+    steps:
+      # 1️⃣ Checkout code
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 2️⃣ Install Trivy manually
+      - name: Install Trivy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget tar
+          wget https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.66.0_Linux-64bit.tar.gz
+          tar zxvf trivy_0.66.0_Linux-64bit.tar.gz
+          sudo mv trivy /usr/local/bin/
+
+      # 3️⃣ Run Trivy SCA scan (suppress exit failures)
+      - name: Run Trivy SCA Scan
+        run: |
+          trivy fs --skip-version-check --severity HIGH,CRITICAL --format template --template "@contrib/html.tpl" --output trivy-sca.html . || true
+
+      # 4️⃣ Upload HTML report
+      - name: Upload SCA HTML Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: sca-report-html
+          path: trivy-sca.html
