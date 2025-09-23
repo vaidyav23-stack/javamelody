@@ -1,11 +1,10 @@
-name: CodeQL
+name: CodeQL-Scan
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main ]
   pull_request:
-    branches: [ master ]
-
+    branches: [ main ]
 jobs:
   analyze:
     name: Analyze
@@ -18,7 +17,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # ------------------------
       # Detect language
+      # ------------------------
       - name: Detect language
         id: detect
         run: |
@@ -30,6 +31,9 @@ jobs:
             echo "lang=unknown" >> "$GITHUB_OUTPUT"
           fi
 
+      # ------------------------
+      # Java multi-module setup
+      # ------------------------
       - name: Setup Java
         if: steps.detect.outputs.lang == 'java'
         uses: actions/setup-java@v4
@@ -37,15 +41,18 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Build Java (multi-module compile)
+        if: steps.detect.outputs.lang == 'java'
+        run: mvn -B clean install -DskipTests
+
+      # ------------------------
+      # .NET setup
+      # ------------------------
       - name: Setup .NET SDK
         if: steps.detect.outputs.lang == 'dotnet'
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-
-      - name: Build Java with Maven
-        if: steps.detect.outputs.lang == 'java'
-        run: mvn -B package --file pom.xml
 
       - name: Restore .NET dependencies
         if: steps.detect.outputs.lang == 'dotnet'
@@ -55,6 +62,9 @@ jobs:
         if: steps.detect.outputs.lang == 'dotnet'
         run: dotnet build --configuration Release --no-restore
 
+      # ------------------------
+      # CodeQL
+      # ------------------------
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
@@ -67,15 +77,16 @@ jobs:
           category: "/language:${{ steps.detect.outputs.lang }}"
           output: results.sarif
 
+      # ------------------------
       # Convert SARIF → HTML
-      - name: Install SARIF tools
-        run: npm install -g sarif-web-component
+      # ------------------------
+      - name: Install SARIF tool
+        run: npm install -g @microsoft/sarif-multitool
 
       - name: Convert SARIF to HTML
         run: |
           npx @microsoft/sarif-multitool transform results.sarif --format Html --output results.html || true
 
-      # Upload report
       - name: Upload CodeQL HTML Report
         uses: actions/upload-artifact@v4
         with:
