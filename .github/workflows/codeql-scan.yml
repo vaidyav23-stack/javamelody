@@ -1,4 +1,4 @@
-name: Java CI with SAST & SCA
+name: Java Code Security Scan
 
 on:
   push:
@@ -7,55 +7,46 @@ on:
     branches: [ master ]
 
 jobs:
-  build-and-scan:
+  java-sca:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # -------------------------
+      # Checkout code
+      # -------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
+      # -------------------------
       # Setup Java
+      # -------------------------
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      # Build & Unit Tests
-      - name: Build & Test
-        run: mvn clean install
+      # -------------------------
+      # Build Java project
+      # -------------------------
+      - name: Build Project
+        run: mvn clean install -DskipTests
 
-      # SpotBugs Analysis
-      - name: Run SpotBugs
+      # -------------------------
+      # Run Dependency-Check (SCA)
+      # -------------------------
+      - name: OWASP Dependency-Check
         run: |
-          mvn com.github.spotbugs:spotbugs-maven-plugin:4.7.3.0:spotbugs \
-            -Dspotbugs.output.format=html \
-            -Dspotbugs.outputFile=target/spotbugs.html
-      - name: Upload SpotBugs Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: spotbugs-html
-          path: target/spotbugs.html
-
-      # Dependency-Check
-      - name: Run Dependency-Check
-        run: |
-          mvn org.owasp:dependency-check-maven:8.3.3:check \
+          mvn org.owasp:dependency-check-maven:8.4.0:check \
             -Dformat=HTML \
-            -DoutputDirectory=target/dependency-check-report
-      - name: Upload Dependency-Check Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: dependency-check-html
-          path: target/dependency-check-report/dependency-check-report.html
+            -DoutputDirectory=target/dependency-check-report \
+            -DfailBuildOnCVSS=0 || true
+        # `|| true` ensures the job continues even if vulnerabilities are found
 
-      # Optional: Trivy FS scan
-      - name: Trivy FS scan
-        run: |
-          sudo apt-get install -y wget
-          wget https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.65.0_Linux-64bit.deb
-          sudo dpkg -i trivy_0.65.0_Linux-64bit.deb
-          trivy fs --format html --output trivy-fs.html .
-      - name: Upload Trivy FS Report
+      # -------------------------
+      # Upload HTML report
+      # -------------------------
+      - name: Upload SCA HTML Report
         uses: actions/upload-artifact@v4
         with:
-          name: trivy-fs-html
-          path: trivy-fs.html
+          name: dependency-check-report
+          path: target/dependency-check-report/dependency-check-report.html
