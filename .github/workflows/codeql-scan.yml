@@ -1,4 +1,4 @@
-name: Java Code Security Scan
+name: Java CI with Code Scanning and SCA
 
 on:
   push:
@@ -7,17 +7,17 @@ on:
     branches: [ master ]
 
 jobs:
-  java-sca:
+  build-and-analyze:
     runs-on: ubuntu-latest
     steps:
       # -------------------------
-      # Checkout code
+      # 1. Checkout
       # -------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
       # -------------------------
-      # Setup Java
+      # 2. Setup Java
       # -------------------------
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -26,27 +26,52 @@ jobs:
           java-version: '17'
 
       # -------------------------
-      # Build Java project
+      # 3. Build & Test
       # -------------------------
-      - name: Build Project
-        run: mvn clean install -DskipTests
+      - name: Build & Test
+        run: mvn clean install -DskipTests=false
 
       # -------------------------
-      # Run Dependency-Check (SCA)
+      # 4. Initialize CodeQL
+      # -------------------------
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: java
+
+      # -------------------------
+      # 5. Perform CodeQL Analysis
+      # -------------------------
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:java"
+
+      # -------------------------
+      # 6. OWASP Dependency-Check (SCA)
       # -------------------------
       - name: OWASP Dependency-Check
         run: |
           mvn org.owasp:dependency-check-maven:8.4.0:check \
             -Dformat=HTML \
             -DoutputDirectory=target/dependency-check-report \
+            -DoutputFile=dependency-check-report.html \
             -DfailBuildOnCVSS=0 || true
-        # `|| true` ensures the job continues even if vulnerabilities are found
 
       # -------------------------
-      # Upload HTML report
+      # 7. Upload SCA HTML Report
       # -------------------------
       - name: Upload SCA HTML Report
         uses: actions/upload-artifact@v4
         with:
           name: dependency-check-report
           path: target/dependency-check-report/dependency-check-report.html
+
+      # -------------------------
+      # 8. Upload CodeQL SARIF
+      # -------------------------
+      - name: Upload CodeQL SARIF
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-sarif
+          path: results.sarif
