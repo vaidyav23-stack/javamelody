@@ -1,4 +1,4 @@
-name: CodeQL-Scan
+name: CodeQL
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Detect language based on project files
+      # Detect language
       - name: Detect language
         id: detect
         run: |
@@ -30,7 +30,6 @@ jobs:
             echo "lang=unknown" >> "$GITHUB_OUTPUT"
           fi
 
-      # Setup environment for Java (if needed)
       - name: Setup Java
         if: steps.detect.outputs.lang == 'java'
         uses: actions/setup-java@v4
@@ -38,19 +37,16 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # Setup environment for .NET (if needed)
       - name: Setup .NET SDK
         if: steps.detect.outputs.lang == 'dotnet'
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
-      # Build Java (Maven) project
       - name: Build Java with Maven
         if: steps.detect.outputs.lang == 'java'
         run: mvn -B package --file pom.xml
 
-      # Build .NET project
       - name: Restore .NET dependencies
         if: steps.detect.outputs.lang == 'dotnet'
         run: dotnet restore
@@ -59,14 +55,29 @@ jobs:
         if: steps.detect.outputs.lang == 'dotnet'
         run: dotnet build --configuration Release --no-restore
 
-      # Initialize CodeQL based on detected language
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ steps.detect.outputs.lang }}
 
-      # Perform CodeQL analysis
       - name: Perform CodeQL Analysis
+        id: codeql
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{ steps.detect.outputs.lang }}"
+          output: results.sarif
+
+      # Convert SARIF → HTML
+      - name: Install SARIF tools
+        run: npm install -g sarif-web-component
+
+      - name: Convert SARIF to HTML
+        run: |
+          npx @microsoft/sarif-multitool transform results.sarif --format Html --output results.html || true
+
+      # Upload report
+      - name: Upload CodeQL HTML Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-report
+          path: results.html
