@@ -23,14 +23,12 @@ jobs:
       - name: Detect language
         id: detect
         run: |
-         if [ -f "pom.xml" ]; then
-          echo "lang=java" >> "$GITHUB_OUTPUT"
+          if [ -f "pom.xml" ]; then
+            echo "lang=java" >> "$GITHUB_OUTPUT"
           elif ls *.sln >/dev/null 2>&1; then
             echo "lang=dotnet" >> "$GITHUB_OUTPUT"
-            else
-              echo "lang=unknown" >> "$GITHUB_OUTPUT"
-              fi
-
+          else
+            echo "lang=unknown" >> "$GITHUB_OUTPUT"
 
       # 3️⃣ Setup Java if detected
       - name: Setup Java
@@ -53,11 +51,12 @@ jobs:
         with:
           languages: ${{ steps.detect.outputs.lang == 'java' && 'java' || steps.detect.outputs.lang == 'dotnet' && 'csharp' || '' }}
 
-      # 6️⃣ Build Java (multi-module Maven)
-      - name: Build Java
+      # 6️⃣ Build Java (Maven)
+      - name: Build Java (Maven)
         if: steps.detect.outputs.lang == 'java'
         run: |
           mvn -B -DskipTests clean install || true
+          # Check if any classes were generated
           if ! find . -type f -path "*/target/classes/*.class" | grep -q .; then
             echo "skip_analysis=true" >> $GITHUB_ENV
 
