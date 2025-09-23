@@ -1,4 +1,4 @@
-name: CodeQL-Scan
+name: CodeQL CI
 
 on:
   push:
@@ -7,17 +7,19 @@ on:
     branches: [ master ]
 
 jobs:
-  analyze:
-    name: Analyze
+  codeql-analyze:
+    name: CodeQL Analysis
     runs-on: ubuntu-latest
     permissions:
       security-events: write
       actions: read
 
     steps:
+      # 1️⃣ Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # 2️⃣ Detect language dynamically
       - name: Detect language
         id: detect
         run: |
@@ -27,11 +29,8 @@ jobs:
             echo "lang=dotnet" >> "$GITHUB_OUTPUT"
           else
             echo "lang=unknown" >> "$GITHUB_OUTPUT"
-          fi
 
-      # ------------------------
-      # Setup Java & Init CodeQL
-      # ------------------------
+      # 3️⃣ Setup Java (if applicable)
       - name: Setup Java
         if: steps.detect.outputs.lang == 'java'
         uses: actions/setup-java@v4
@@ -39,45 +38,32 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Initialize CodeQL for Java
-        if: steps.detect.outputs.lang == 'java'
+      # 4️⃣ Initialize CodeQL for detected language
+      - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
-          languages: java
+          languages: ${{ steps.detect.outputs.lang == 'java' && 'java' || steps.detect.outputs.lang == 'dotnet' && 'csharp' || '' }}
 
-      - name: Build Java (multi-module safe)
+      # 5️⃣ Build Java (multi-module safe)
+      - name: Build Java
         if: steps.detect.outputs.lang == 'java'
         run: |
-          echo "Running Maven build across all modules..."
           mvn -B -DskipTests clean install || true
-          echo "Checking for compiled classes..."
           if ! find . -type f -path "*/target/classes/*.class" | grep -q .; then
-            echo "⚠️ No Java classes compiled in this repo (likely parent/aggregator POM only). Skipping CodeQL."
             echo "skip_analysis=true" >> $GITHUB_ENV
-          fi
 
-      # ------------------------
-      # Setup .NET & Init CodeQL
-      # ------------------------
-      - name: Setup .NET SDK
+      # 6️⃣ Build .NET
+      - name: Setup .NET
         if: steps.detect.outputs.lang == 'dotnet'
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
-      - name: Initialize CodeQL for .NET
-        if: steps.detect.outputs.lang == 'dotnet'
-        uses: github/codeql-action/init@v3
-        with:
-          languages: csharp
-
       - name: Build .NET
         if: steps.detect.outputs.lang == 'dotnet'
         run: dotnet build --configuration Release --no-restore || true
 
-      # ------------------------
-      # Run CodeQL Analysis
-      # ------------------------
+      # 7️⃣ Run CodeQL Analysis
       - name: Perform CodeQL Analysis
         if: env.skip_analysis != 'true' && steps.detect.outputs.lang != 'unknown'
         uses: github/codeql-action/analyze@v3
@@ -85,9 +71,14 @@ jobs:
           category: "/language:${{ steps.detect.outputs.lang }}"
           output: results
 
-      # ------------------------
-      # Export HTML Report
-      # ------------------------
+      # 8️⃣ Setup CodeQL CLI for HTML report
+      - name: Setup CodeQL CLI
+        if: env.skip_analysis != 'true' && steps.detect.outputs.lang != 'unknown'
+        uses: github/codeql-action/setup@v2
+        with:
+          version: latest
+
+      # 9️⃣ Generate HTML report
       - name: Generate CodeQL HTML Report
         if: env.skip_analysis != 'true' && steps.detect.outputs.lang != 'unknown'
         run: |
@@ -97,6 +88,7 @@ jobs:
             --output=codeql-html/report.html \
             --sarif-category="/language:${{ steps.detect.outputs.lang }}"
 
+      # 🔟 Upload HTML report as artifact
       - name: Upload CodeQL HTML Report
         if: env.skip_analysis != 'true' && steps.detect.outputs.lang != 'unknown'
         uses: actions/upload-artifact@v4
