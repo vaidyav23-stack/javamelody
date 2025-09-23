@@ -60,6 +60,7 @@ jobs:
           # Check if classes were generated
           if ! find . -type f -path "*/target/classes/*.class" | grep -q .; then
             echo "skip_analysis=true" >> $GITHUB_ENV
+          fi
 
       # 7️⃣ Build .NET
       - name: Build .NET
