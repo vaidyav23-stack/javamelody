@@ -23,12 +23,14 @@ jobs:
       - name: Detect language
         id: detect
         run: |
-          if [ -f "pom.xml" ]; then
-            echo "lang=java" >> "$GITHUB_OUTPUT"
+         if [ -f "pom.xml" ]; then
+          echo "lang=java" >> "$GITHUB_OUTPUT"
           elif ls *.sln >/dev/null 2>&1; then
             echo "lang=dotnet" >> "$GITHUB_OUTPUT"
-          else
-            echo "lang=unknown" >> "$GITHUB_OUTPUT"
+            else
+              echo "lang=unknown" >> "$GITHUB_OUTPUT"
+              fi
+
 
       # 3️⃣ Setup Java if detected
       - name: Setup Java
