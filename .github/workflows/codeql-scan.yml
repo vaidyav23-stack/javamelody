@@ -19,7 +19,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Detect language dynamically
+      # 2️⃣ Detect project language
       - name: Detect language
         id: detect
         run: |
@@ -31,7 +31,7 @@ jobs:
             echo "lang=unknown" >> "$GITHUB_OUTPUT"
           fi
 
-      # 3️⃣ Setup Java if detected
+      # 3️⃣ Setup Java (if Java detected)
       - name: Setup Java
         if: steps.detect.outputs.lang == 'java'
         uses: actions/setup-java@v4
@@ -39,25 +39,24 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # 4️⃣ Setup .NET if detected
+      # 4️⃣ Setup .NET (if .NET detected)
       - name: Setup .NET
         if: steps.detect.outputs.lang == 'dotnet'
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
-      # 5️⃣ Initialize CodeQL for the detected language
+      # 5️⃣ Initialize CodeQL
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ steps.detect.outputs.lang == 'java' && 'java' || steps.detect.outputs.lang == 'dotnet' && 'csharp' || '' }}
 
       # 6️⃣ Build Java (Maven)
-      - name: Build Java (Maven)
+      - name: Build Java
         if: steps.detect.outputs.lang == 'java'
         run: |
-          mvn -B -DskipTests clean install || true
-          # Check if classes were generated
+          mvn -B -DskipTests clean install
           if ! find . -type f -path "*/target/classes/*.class" | grep -q .; then
             echo "skip_analysis=true" >> $GITHUB_ENV
           fi
@@ -65,28 +64,36 @@ jobs:
       # 7️⃣ Build .NET
       - name: Build .NET
         if: steps.detect.outputs.lang == 'dotnet'
-        run: dotnet build --configuration Release --no-restore || true
+        run: dotnet build --configuration Release --no-restore
 
-      # 8️⃣ Perform CodeQL analysis
-      - name: Perform CodeQL Analysis
+      # 8️⃣ Run CodeQL Analysis
+      - name: CodeQL Analysis
         if: env.skip_analysis != 'true' && steps.detect.outputs.lang != 'unknown'
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{ steps.detect.outputs.lang }}"
           output: results
 
-      # 9️⃣ Generate HTML report from CodeQL results
-      - name: Generate CodeQL HTML Report
+      # 9️⃣ Generate SARIF Report
+      - name: Generate SARIF Report
         if: env.skip_analysis != 'true' && steps.detect.outputs.lang != 'unknown'
         run: |
-          mkdir -p codeql-html
+          mkdir -p codeql-sarif
           /opt/hostedtoolcache/CodeQL/2.23.0/x64/codeql/codeql database interpret-results results \
-            --format=html \
-            --output=codeql-html/report.html \
+            --format=sarif-latest \
+            --output=codeql-sarif/report.sarif \
             --sarif-category="/language:${{ steps.detect.outputs.lang }}"
 
-      # 🔟 Upload HTML report as artifact
-      - name: Upload CodeQL HTML Report
+      # 🔟 Convert SARIF to HTML
+      - name: Convert SARIF to HTML
+        if: env.skip_analysis != 'true' && steps.detect.outputs.lang != 'unknown'
+        run: |
+          npm install -g sarif-html
+          mkdir -p codeql-html
+          sarif-html codeql-sarif/report.sarif -o codeql-html/report.html
+
+      # 1️⃣1️⃣ Upload HTML report
+      - name: Upload HTML Report
         if: env.skip_analysis != 'true' && steps.detect.outputs.lang != 'unknown'
         uses: actions/upload-artifact@v4
         with:
