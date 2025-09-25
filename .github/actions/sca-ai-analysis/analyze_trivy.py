@@ -1,7 +1,7 @@
-import openai
 import json
 import os
 from pathlib import Path
+import cohere
 
 summary = ""
 
@@ -28,12 +28,13 @@ You are a security expert. Analyze the following Trivy SCA findings and suggest 
 '''
 
 try:
-    openai.api_key = os.environ["OPENAI_API_KEY"]
-    response = openai.ChatCompletion.create(
-        model="gpt-5",
-        messages=[{"role": "user", "content": prompt}]
+    co = cohere.Client(os.environ["COHERE_API_KEY"])
+    response = co.chat(
+        model="command-r-plus",
+        message=prompt,
+        temperature=0.3
     )
-    ai_output = response.choices[0].message.content
+    ai_output = response.text
 except Exception as e:
     ai_output = f"⚠️ AI analysis failed: {e}"
 
