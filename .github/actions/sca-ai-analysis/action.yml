@@ -1,0 +1,83 @@
+name: SCA AI Analysis
+description: Run Trivy SCA scan and analyze results with OpenAI
+inputs:
+  openai-api-key:
+    required: true
+    description: OpenAI API key for remediation suggestions
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install Trivy
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y wget tar
+        wget https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.66.0_Linux-64bit.tar.gz
+        tar zxvf trivy_0.66.0_Linux-64bit.tar.gz
+        sudo mv trivy /usr/local/bin/
+
+    - name: Run Trivy SCA Scan
+      run: |
+        trivy fs --skip-version-check --severity HIGH,CRITICAL \
+          --format json --output trivy-sca.json . || true
+        trivy fs --skip-version-check --severity HIGH,CRITICAL \
+          --format template --template "@contrib/html.tpl" --output trivy-sca.html . || true
+
+    - name: Upload HTML Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: sca-report-html
+        path: trivy-sca.html
+
+    - name: Analyze Trivy Results with AI
+      env:
+        OPENAI_API_KEY: ${{ inputs.openai-api-key }}
+      run: |
+        pip install openai==1.3.5
+        python - <<EOF
+import json
+import os
+from pathlib import Path
+from openai import OpenAI
+
+try:
+    with open("trivy-sca.json") as f:
+        findings = json.load(f)
+except Exception as e:
+    print(f"❌ Error loading Trivy results: {e}")
+    exit(1)
+
+summary = f"Found {len(findings.get('Results', []))} components scanned.\\n\\n"
+
+for result in findings.get("Results", []):
+    if "Vulnerabilities" in result:
+        summary += f"\\n📦 {result['Target']}:\\n"
+        for vuln in result["Vulnerabilities"]:
+            if vuln["Severity"] in ["HIGH", "CRITICAL"]:
+                summary += f" - {vuln['VulnerabilityID']} ({vuln['Severity']}): {vuln['Title']}\\n"
+
+prompt = f'''
+You are a security expert. Analyze the following Trivy SCA findings and suggest remediation strategies for each vulnerability. Focus only on HIGH and CRITICAL severity issues.
+
+{summary}
+'''
+
+client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+response = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[{"role": "user", "content": prompt}]
+)
+
+ai_output = response.choices[0].message.content
+
+print("=== 🛠️ AI Remediation Suggestions ===")
+print(ai_output)
+
+Path("ai-suggestions.txt").write_text(ai_output)
+EOF
+
+    - name: Upload AI Suggestions
+      uses: actions/upload-artifact@v4
+      with:
+        name: ai-remediation-suggestions
+        path: ai-suggestions.txt
