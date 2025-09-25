@@ -43,15 +43,18 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          pip install openai
+          pip install openai==1.3.5
           python - <<EOF
 import json
 from pathlib import Path
 from openai import OpenAI
 
-# Load Trivy results
-with open("trivy-sca.json") as f:
-    findings = json.load(f)
+try:
+    with open("trivy-sca.json") as f:
+        findings = json.load(f)
+except Exception as e:
+    print(f"❌ Error loading Trivy results: {e}")
+    exit(1)
 
 summary = f"Found {len(findings.get('Results', []))} components scanned.\n\n"
 
@@ -59,10 +62,14 @@ for result in findings.get("Results", []):
     if "Vulnerabilities" in result:
         summary += f"\n📦 {result['Target']}:\n"
         for vuln in result["Vulnerabilities"]:
-            summary += f" - {vuln['VulnerabilityID']} ({vuln['Severity']}): {vuln['Title']}\n"
+            if vuln["Severity"] in ["HIGH", "CRITICAL"]:
+                summary += f" - {vuln['VulnerabilityID']} ({vuln['Severity']}): {vuln['Title']}\n"
 
-prompt = f"""Analyze these SCA findings from Trivy and suggest remediation strategies:
-{summary}"""
+prompt = f'''
+You are a security expert. Analyze the following Trivy SCA findings and suggest remediation strategies for each vulnerability. Focus only on HIGH and CRITICAL severity issues.
+
+{summary}
+'''
 
 client = OpenAI(api_key="${{ secrets.OPENAI_API_KEY }}")
 response = client.chat.completions.create(
@@ -72,10 +79,9 @@ response = client.chat.completions.create(
 
 ai_output = response.choices[0].message.content
 
-print("=== AI Remediation Suggestions ===")
+print("=== 🛠️ AI Remediation Suggestions ===")
 print(ai_output)
 
-# Save output to file
 Path("ai-suggestions.txt").write_text(ai_output)
 EOF
 
