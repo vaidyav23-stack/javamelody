@@ -17,7 +17,7 @@ jobs:
       - name: Run SCA AI Analysis
         uses: ./.github/actions/sca-ai-analysis
         with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          cohere-api-key: ${{ secrets.COHERE_API_KEY }}
 
       - name: Comment AI Suggestions on PR
         if: github.event_name == 'pull_request'
