@@ -30,7 +30,7 @@ You are a security expert. Analyze the following Trivy SCA findings and suggest 
 try:
     openai.api_key = os.environ["OPENAI_API_KEY"]
     response = openai.ChatCompletion.create(
-        model="gpt-4",
+        model="gpt-5",
         messages=[{"role": "user", "content": prompt}]
     )
     ai_output = response.choices[0].message.content
