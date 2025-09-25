@@ -4,11 +4,13 @@ from pathlib import Path
 from openai import OpenAI
 
 try:
-    with open("trivy-sca.json") as f:
-        findings = json.load(f)
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}]
+    )
+    ai_output = response.choices[0].message.content
 except Exception as e:
-    print(f"❌ Error loading Trivy results: {e}")
-    exit(1)
+    ai_output = f"⚠️ AI analysis failed: {e}"
 
 summary = f"Found {len(findings.get('Results', []))} components scanned.\n\n"
 
