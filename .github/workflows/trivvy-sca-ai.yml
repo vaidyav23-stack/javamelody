@@ -1,0 +1,87 @@
+name: SCA-Scan-AI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  sca-scan:
+    runs-on: ubuntu-latest
+    steps:
+      # 1️⃣ Checkout code
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 2️⃣ Install Trivy manually
+      - name: Install Trivy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget tar
+          wget https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.66.0_Linux-64bit.tar.gz
+          tar zxvf trivy_0.66.0_Linux-64bit.tar.gz
+          sudo mv trivy /usr/local/bin/
+
+      # 3️⃣ Run Trivy SCA scan (JSON + HTML)
+      - name: Run Trivy SCA Scan
+        run: |
+          trivy fs --skip-version-check --severity HIGH,CRITICAL \
+            --format json --output trivy-sca.json . || true
+          trivy fs --skip-version-check --severity HIGH,CRITICAL \
+            --format template --template "@contrib/html.tpl" --output trivy-sca.html . || true
+
+      # 4️⃣ Upload HTML report
+      - name: Upload SCA HTML Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: sca-report-html
+          path: trivy-sca.html
+
+      # 5️⃣ AI Analysis of JSON output
+      - name: Analyze Trivy Results with AI
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          pip install openai
+          python - <<EOF
+import json
+from pathlib import Path
+from openai import OpenAI
+
+# Load Trivy results
+with open("trivy-sca.json") as f:
+    findings = json.load(f)
+
+summary = f"Found {len(findings.get('Results', []))} components scanned.\n\n"
+
+for result in findings.get("Results", []):
+    if "Vulnerabilities" in result:
+        summary += f"\n📦 {result['Target']}:\n"
+        for vuln in result["Vulnerabilities"]:
+            summary += f" - {vuln['VulnerabilityID']} ({vuln['Severity']}): {vuln['Title']}\n"
+
+prompt = f"""Analyze these SCA findings from Trivy and suggest remediation strategies:
+{summary}"""
+
+client = OpenAI(api_key="${{ secrets.OPENAI_API_KEY }}")
+response = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[{"role": "user", "content": prompt}]
+)
+
+ai_output = response.choices[0].message.content
+
+print("=== AI Remediation Suggestions ===")
+print(ai_output)
+
+# Save output to file
+Path("ai-suggestions.txt").write_text(ai_output)
+EOF
+
+      # 6️⃣ Upload AI Suggestions
+      - name: Upload AI Suggestions
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-remediation-suggestions
+          path: ai-suggestions.txt
