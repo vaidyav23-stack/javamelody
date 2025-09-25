@@ -1,7 +1,7 @@
+import openai
 import json
 import os
 from pathlib import Path
-from openai import OpenAI
 
 summary = ""
 
@@ -28,9 +28,9 @@ You are a security expert. Analyze the following Trivy SCA findings and suggest 
 '''
 
 try:
-    client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
+    openai.api_key = os.environ["OPENAI_API_KEY"]
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
         messages=[{"role": "user", "content": prompt}]
     )
     ai_output = response.choices[0].message.content
