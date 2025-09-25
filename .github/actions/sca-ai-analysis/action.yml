@@ -1,9 +1,9 @@
 name: SCA AI Analysis
-description: Run Trivy SCA scan and analyze results with OpenAI
+description: Run Trivy SCA scan and analyze results with Cohere
 inputs:
-  openai-api-key:
+  cohere-api-key:
     required: true
-    description: OpenAI API key for remediation suggestions
+    description: Cohere API key for remediation suggestions
 
 runs:
   using: "composite"
@@ -33,12 +33,12 @@ runs:
 
     - name: Install Python Dependencies
       shell: bash
-      run: pip install openai==0.28.1
+      run: pip install cohere
 
     - name: Run AI Analysis
       shell: bash
       env:
-        OPENAI_API_KEY: ${{ inputs.openai-api-key }}
+        COHERE_API_KEY: ${{ inputs.cohere-api-key }}
       run: python3 .github/actions/sca-ai-analysis/analyze_trivy.py
 
     - name: Upload AI Suggestions
