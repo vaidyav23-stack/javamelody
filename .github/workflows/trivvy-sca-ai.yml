@@ -9,6 +9,7 @@ on:
 jobs:
   sca-scan:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -17,3 +18,17 @@ jobs:
         uses: ./.github/actions/sca-ai-analysis
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+
+      - name: Comment AI Suggestions on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const suggestions = fs.readFileSync('ai-suggestions.txt', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `### 🛡️ AI Remediation Suggestions\n\n${suggestions}`
+            });
